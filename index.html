@@ -1,4 +1,13 @@
-<!doctype html><html lang="it"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html lang="it"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}
+/* Niente zoom con doppio tocco o pizzico */
+html, body, button, label, .stage { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+#gl, .cmp, .sl input[type=range] { touch-action: none; }
+.topbar .ic { min-width: 40px; padding-left: 0; padding-right: 0; font-size: 16px; line-height: 1; }
+@media (max-width: 480px) {
+  .topbar .name { display: none; }
+  .topbar .dl { margin-left: auto; }
+}
+</style></head><body>
 <title>Prisma Lab</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
@@ -262,7 +271,8 @@ button:focus-visible, .btn:focus-within, input:focus-visible { outline: 2px soli
     <span class="name">Prisma Lab</span>
     <button type="button" class="cmp">Originale</button>
     <label class="btn" for="file">Carica</label>
-    <button type="button" id="rand-m" aria-label="Randomize">🎲</button>
+    <button type="button" id="rand-m" class="ic" aria-label="Randomize">🎲</button>
+    <button type="button" id="crop-m" class="ic" aria-label="Ritaglia e ruota">✂️</button>
     <button type="button" class="dl primary" data-t="Scarica">Scarica</button>
   </div>
   <div class="stage" id="stage">
@@ -304,6 +314,7 @@ button:focus-visible, .btn:focus-within, input:focus-visible { outline: 2px soli
         <button type="button" class="dl" data-t="Scarica">Scarica</button>
         <button type="button" id="sample">Immagine di esempio</button>
         <button type="button" id="reset">Azzera posizione</button>
+        <button type="button" id="crop-d">Ritaglia / Ruota</button>
       </div>
     </section>
 
@@ -603,12 +614,12 @@ button:focus-visible, .btn:focus-within, input:focus-visible { outline: 2px soli
     return c;
   }
   var sceneCanvas = makeScene();
-  function loadSample() { uploadSource(sceneCanvas, sceneCanvas.width, sceneCanvas.height); }
+  function loadSample() { editSrc = { el: sceneCanvas, w: sceneCanvas.width, h: sceneCanvas.height }; uploadSource(sceneCanvas, sceneCanvas.width, sceneCanvas.height); }
 
   function loadFile(file) {
     if (!file || file.type.indexOf('image/') !== 0) return;
     var url = URL.createObjectURL(file), img = new Image();
-    img.onload = function () { uploadSource(img, img.naturalWidth, img.naturalHeight); URL.revokeObjectURL(url); };
+    img.onload = function () { editSrc = { el: img, w: img.naturalWidth, h: img.naturalHeight }; uploadSource(img, img.naturalWidth, img.naturalHeight); };
     img.onerror = function () { URL.revokeObjectURL(url); };
     img.src = url;
   }
@@ -733,6 +744,7 @@ button:focus-visible, .btn:focus-within, input:focus-visible { outline: 2px soli
           b.setAttribute('aria-pressed', cb.checked ? 'true' : 'false');
         });
       });
+      chip('Ritaglia e ruota', null, null, openCrop);
       chip('Azzera posizione', null, null, resetPos);
       chip('Immagine di esempio', null, null, loadSample);
       showMsg('Tieni premuto «Originale» in alto per confrontare con la foto senza filtro.');
@@ -1099,6 +1111,200 @@ button:focus-visible, .btn:focus-within, input:focus-visible { outline: 2px soli
   selectCat('prisma');
 
   resize();
+
+  /* ---------- Ritaglia e ruota ---------- */
+  var editSrc = null;
+  function openCrop() {
+    if (!editSrc || document.getElementById('crop-ov')) return;
+    var src = editSrc.el, SW = editSrc.w, SH = editSrc.h;
+    var rot = 0, rect = { l: 0, t: 0, r: 1, b: 1 }, ratio = null, drag = null;
+    var RW = SW, RH = SH, dw = 100, dh = 100, dpr = Math.min(2, window.devicePixelRatio || 1);
+    var prev = document.createElement('canvas');
+
+    function applyRot(ctx, rw, rh, rt) {
+      if (rt === 90) { ctx.translate(rw, 0); ctx.rotate(Math.PI / 2); }
+      else if (rt === 180) { ctx.translate(rw, rh); ctx.rotate(Math.PI); }
+      else if (rt === 270) { ctx.translate(0, rh); ctx.rotate(-Math.PI / 2); }
+    }
+    function buildPrev() {
+      RW = rot % 180 ? SH : SW; RH = rot % 180 ? SW : SH;
+      var pm = Math.min(1, 1600 / Math.max(RW, RH));
+      prev.width = Math.max(1, Math.round(RW * pm)); prev.height = Math.max(1, Math.round(RH * pm));
+      var x = prev.getContext('2d');
+      x.save(); x.scale(prev.width / RW, prev.height / RH); applyRot(x, RW, RH, rot); x.drawImage(src, 0, 0); x.restore();
+    }
+
+    var ov = document.createElement('div');
+    ov.id = 'crop-ov';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:90;background:#0b0c11;color:#e7e9f1;display:flex;flex-direction:column;gap:10px;padding:max(10px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(10px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px));font-family:var(--font-ui);';
+    var head = document.createElement('div');
+    head.style.cssText = 'display:flex;justify-content:space-between;align-items:baseline;gap:10px;';
+    var ttl = document.createElement('b'); ttl.textContent = 'Ritaglia e ruota'; ttl.style.fontSize = '16px';
+    var info = document.createElement('span'); info.style.cssText = 'font-size:12px;color:#8a90a6;';
+    head.appendChild(ttl); head.appendChild(info);
+    var stage2 = document.createElement('div');
+    stage2.style.cssText = 'flex:1;min-height:0;display:flex;align-items:center;justify-content:center;';
+    var cv = document.createElement('canvas');
+    cv.style.cssText = 'display:block;touch-action:none;';
+    stage2.appendChild(cv);
+
+    var ratioRow = document.createElement('div');
+    ratioRow.style.cssText = 'display:flex;gap:8px;overflow-x:auto;touch-action:pan-x;padding-bottom:2px;';
+    var chips2 = [];
+    [['Libera', null], ['1:1', 1], ['4:5', 4 / 5], ['5:4', 5 / 4], ['3:4', 3 / 4], ['4:3', 4 / 3], ['2:3', 2 / 3], ['3:2', 3 / 2], ['9:16', 9 / 16], ['16:9', 16 / 9]].forEach(function (r) {
+      var b = document.createElement('button'); b.type = 'button'; b.textContent = r[0];
+      b.style.cssText = 'flex:none;min-height:38px;';
+      b.addEventListener('click', function () { setRatio(r[1]); });
+      ratioRow.appendChild(b); chips2.push({ b: b, r: r[1] });
+    });
+    function refreshChips() {
+      chips2.forEach(function (c) {
+        var on = ratio === null ? c.r === null : (c.r !== null && Math.abs(c.r - ratio) < 0.001);
+        c.b.classList.toggle('primary', on);
+      });
+    }
+
+    var actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;';
+    function mk(label, cls, fn, aria) {
+      var b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.style.minHeight = '42px';
+      if (cls) b.className = cls; if (aria) b.setAttribute('aria-label', aria);
+      b.addEventListener('click', fn); actions.appendChild(b); return b;
+    }
+    mk('\u21ba', '', function () { rotate(-1); }, 'Ruota a sinistra').style.minWidth = '46px';
+    mk('\u21bb', '', function () { rotate(1); }, 'Ruota a destra').style.minWidth = '46px';
+    mk('Reimposta', '', function () { rot = 0; rect = { l: 0, t: 0, r: 1, b: 1 }; ratio = null; buildPrev(); layout(); refreshChips(); });
+    var sp = document.createElement('span'); sp.style.flex = '1'; actions.appendChild(sp);
+    mk('Annulla', '', close);
+    mk('Applica', 'primary', apply);
+
+    ov.appendChild(head); ov.appendChild(stage2); ov.appendChild(ratioRow); ov.appendChild(actions);
+    document.body.appendChild(ov);
+
+    function layout() {
+      var aw = stage2.clientWidth - 4, ah = stage2.clientHeight - 4;
+      var f = Math.min(aw / RW, ah / RH);
+      dw = Math.max(60, Math.floor(RW * f)); dh = Math.max(60, Math.floor(RH * f));
+      cv.width = Math.round(dw * dpr); cv.height = Math.round(dh * dpr);
+      cv.style.width = dw + 'px'; cv.style.height = dh + 'px';
+      draw();
+    }
+    function draw() {
+      var x = cv.getContext('2d');
+      x.setTransform(dpr, 0, 0, dpr, 0, 0);
+      x.clearRect(0, 0, dw, dh);
+      x.drawImage(prev, 0, 0, dw, dh);
+      var L = rect.l * dw, T = rect.t * dh, R = rect.r * dw, B = rect.b * dh;
+      x.fillStyle = 'rgba(0,0,0,.62)';
+      x.beginPath(); x.rect(0, 0, dw, dh); x.rect(L, T, R - L, B - T); x.fill('evenodd');
+      x.lineWidth = 1; x.strokeStyle = 'rgba(255,255,255,.35)';
+      x.beginPath();
+      for (var i = 1; i < 3; i++) {
+        x.moveTo(L + (R - L) * i / 3, T); x.lineTo(L + (R - L) * i / 3, B);
+        x.moveTo(L, T + (B - T) * i / 3); x.lineTo(R, T + (B - T) * i / 3);
+      }
+      x.stroke();
+      x.lineWidth = 1.5; x.strokeStyle = 'rgba(255,255,255,.95)'; x.strokeRect(L, T, R - L, B - T);
+      x.lineWidth = 4; x.strokeStyle = '#fff';
+      var k = Math.max(8, Math.min(24, (R - L) / 3, (B - T) / 3));
+      [[L, T, 1, 1], [R, T, -1, 1], [L, B, 1, -1], [R, B, -1, -1]].forEach(function (c) {
+        x.beginPath(); x.moveTo(c[0] + c[2] * k, c[1]); x.lineTo(c[0], c[1]); x.lineTo(c[0], c[1] + c[3] * k); x.stroke();
+      });
+      info.textContent = Math.round((rect.r - rect.l) * RW) + '\u00d7' + Math.round((rect.b - rect.t) * RH);
+    }
+    function pt(e) {
+      var b = cv.getBoundingClientRect();
+      return { x: (e.clientX - b.left) * dw / b.width, y: (e.clientY - b.top) * dh / b.height };
+    }
+    function clamp(v, a, b) { return Math.min(b, Math.max(a, v)); }
+    cv.addEventListener('pointerdown', function (e) {
+      var p = pt(e), best = null, bd = 36;
+      [['l', 't'], ['r', 't'], ['l', 'b'], ['r', 'b']].forEach(function (c) {
+        var d = Math.hypot(p.x - rect[c[0]] * dw, p.y - rect[c[1]] * dh);
+        if (d < bd) { bd = d; best = c; }
+      });
+      if (best) drag = { mode: 'corner', fx: best[0] === 'l' ? 'r' : 'l', fy: best[1] === 't' ? 'b' : 't' };
+      else if (p.x > rect.l * dw && p.x < rect.r * dw && p.y > rect.t * dh && p.y < rect.b * dh)
+        drag = { mode: 'move', sx: p.x, sy: p.y, r0: { l: rect.l, t: rect.t, r: rect.r, b: rect.b } };
+      if (drag) { try { cv.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); }
+    });
+    cv.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      var p = pt(e);
+      if (drag.mode === 'move') {
+        var w = drag.r0.r - drag.r0.l, h = drag.r0.b - drag.r0.t;
+        var nl = clamp(drag.r0.l + (p.x - drag.sx) / dw, 0, 1 - w), nt = clamp(drag.r0.t + (p.y - drag.sy) / dh, 0, 1 - h);
+        rect = { l: nl, t: nt, r: nl + w, b: nt + h };
+      } else {
+        var ox = rect[drag.fx] * dw, oy = rect[drag.fy] * dh;
+        var px = clamp(p.x, 0, dw), py = clamp(p.y, 0, dh);
+        var sx = px >= ox ? 1 : -1, sy = py >= oy ? 1 : -1;
+        var w2 = Math.abs(px - ox), h2 = Math.abs(py - oy);
+        var mw = sx > 0 ? dw - ox : ox, mh = sy > 0 ? dh - oy : oy;
+        if (ratio) {
+          if (w2 / ratio > h2) h2 = w2 / ratio; else w2 = h2 * ratio;
+          w2 = Math.max(w2, 24 * Math.max(1, ratio)); h2 = w2 / ratio;
+          var f = Math.min(1, mw / w2, mh / h2); w2 *= f; h2 *= f;
+        } else {
+          w2 = Math.min(mw, Math.max(24, w2)); h2 = Math.min(mh, Math.max(24, h2));
+        }
+        var ex = ox + sx * w2, ey = oy + sy * h2;
+        rect = { l: Math.min(ox, ex) / dw, r: Math.max(ox, ex) / dw, t: Math.min(oy, ey) / dh, b: Math.max(oy, ey) / dh };
+      }
+      draw();
+    });
+    function endDrag() { drag = null; }
+    cv.addEventListener('pointerup', endDrag);
+    cv.addEventListener('pointercancel', endDrag);
+
+    function setRatio(r) {
+      ratio = r;
+      if (r) {
+        var cw = (rect.r - rect.l) * dw, ch = (rect.b - rect.t) * dh, w, h;
+        if (cw / ch > r) { h = ch; w = h * r; } else { w = cw; h = w / r; }
+        var cx = (rect.l + rect.r) / 2 * dw, cy = (rect.t + rect.b) / 2 * dh;
+        rect = { l: (cx - w / 2) / dw, r: (cx + w / 2) / dw, t: (cy - h / 2) / dh, b: (cy + h / 2) / dh };
+      }
+      refreshChips(); draw();
+    }
+    function rotate(dir) {
+      var q = rect;
+      rect = dir > 0 ? { l: 1 - q.b, t: q.l, r: 1 - q.t, b: q.r } : { l: q.t, t: 1 - q.r, r: q.b, b: 1 - q.l };
+      rot = (rot + (dir > 0 ? 90 : 270)) % 360;
+      if (ratio) ratio = 1 / ratio;
+      buildPrev(); layout(); refreshChips();
+    }
+    function apply() {
+      var cw = Math.max(1, Math.round((rect.r - rect.l) * RW)), ch = Math.max(1, Math.round((rect.b - rect.t) * RH));
+      var m = Math.min(1, 8192 / Math.max(cw, ch));
+      var out = document.createElement('canvas');
+      out.width = Math.max(1, Math.round(cw * m)); out.height = Math.max(1, Math.round(ch * m));
+      var x = out.getContext('2d');
+      x.scale(out.width / cw, out.height / ch);
+      x.translate(-rect.l * RW, -rect.t * RH);
+      applyRot(x, RW, RH, rot);
+      x.drawImage(src, 0, 0);
+      close();
+      uploadSource(out, out.width, out.height);
+    }
+    function onKey(e) { if (e.key === 'Escape') close(); }
+    function close() {
+      window.removeEventListener('resize', layout);
+      window.removeEventListener('keydown', onKey);
+      ov.remove();
+    }
+    window.addEventListener('resize', layout);
+    window.addEventListener('keydown', onKey);
+    buildPrev(); layout(); refreshChips();
+  }
+  $('crop-m').addEventListener('click', openCrop);
+  $('crop-d').addEventListener('click', openCrop);
+
+  /* Blocca lo zoom della pagina (doppio tocco, pizzico di Safari) */
+  ['gesturestart', 'gesturechange', 'gestureend', 'dblclick'].forEach(function (n) {
+    document.addEventListener(n, function (e) { e.preventDefault(); }, { passive: false });
+  });
+
   loadSample();
   requestAnimationFrame(frame);
 })();
