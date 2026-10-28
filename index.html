@@ -1,0 +1,1082 @@
+<!doctype html><html lang="it"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Prisma Lab</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: stage WebGL a sinistra, pannello strumenti a destra (sotto, su telefono). Una sola nota di colore: la linea spettrale sotto il titolo. */
+:root {
+  --bg: #0b0c11;
+  --panel: #12141b;
+  --line: #252937;
+  --fg: #e7e9f1;
+  --muted: #8a90a6;
+  --accent: #86c8ff;
+  --accent-ink: #06121c;
+  --font-ui: 'Bricolage Grotesque', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.45;
+  display: flex;
+  padding-block: 14px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.app {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 14px;
+}
+.stage {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  background: #000;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+#gl { display: block; max-width: 100%; max-height: 100%; touch-action: none; cursor: grab; }
+#gl.dragging { cursor: grabbing; }
+.hint {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  max-width: calc(100% - 20px);
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: rgba(8, 9, 13, 0.66);
+  color: #c4c9da;
+  font: 400 11px/1.5 var(--font-mono);
+  pointer-events: none;
+}
+.hint b { font-weight: 500; color: var(--accent); font-variant-numeric: tabular-nums; }
+.stage.drop::after {
+  content: 'Rilascia l\2019 immagine';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(8, 9, 13, 0.72);
+  font: 600 20px var(--font-ui);
+  color: var(--fg);
+}
+.fallback, .err {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+}
+.err { font: 400 12px/1.5 var(--font-mono); white-space: pre-wrap; align-content: center; justify-items: start; color: #ff9aa8; background: rgba(0,0,0,0.85); }
+
+.panel {
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+h1 { margin: 0; font: 700 28px/1.1 var(--font-ui); letter-spacing: -0.01em; text-wrap: balance; }
+.spectrum {
+  height: 3px;
+  margin: 10px 0 8px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #ff4d4d, #ffb347, #f5e960, #5ee08a, #4db8ff, #8a6bff);
+}
+.sub { margin: 0; color: var(--muted); font-size: 13px; }
+section { display: flex; flex-direction: column; gap: 12px; }
+h2 {
+  margin: 0;
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: baseline; }
+.row label { font-size: 13px; }
+.row output { font: 500 12px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--accent); }
+.row input[type=range] { grid-column: 1 / -1; width: 100%; margin: 0; accent-color: var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+button, .btn {
+  appearance: none;
+  font: 500 13px var(--font-ui);
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 11px;
+  cursor: pointer;
+}
+button:hover, .btn:hover { border-color: var(--muted); }
+button.primary, .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+button.primary:hover, .btn.primary:hover { filter: brightness(1.08); }
+button:focus-visible, .btn:focus-within, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.btn { position: relative; display: inline-block; }
+.stage .actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+}
+.stage .actions .btn, .stage .actions button { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5); }
+.stage .actions button { background: var(--panel); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.check input { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+.note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+.vh { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; pointer-events: none; }
+.cmp { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: none; }
+.cmp.on { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+
+/* ---------- Editor da telefono (modello Lightroom: foto sopra, strumenti sotto il pollice) ---------- */
+.topbar, .editor { display: none; }
+@media (max-width: 820px) {
+  body { padding: 0; overscroll-behavior: none; }
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; gap: 0; }
+  .panel, .stage .actions { display: none; }
+  .stage { border: 0; border-radius: 0; }
+  .hint { font-size: 10px; left: 8px; bottom: 8px; }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-block: 8px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar .name { margin-right: auto; font: 700 17px/1 var(--font-ui); }
+  .topbar button, .topbar .btn { min-height: 38px; padding: 8px 12px; }
+
+  .editor {
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .sl {
+    min-height: 74px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-block: 8px 2px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .sl-head { display: flex; align-items: center; gap: 10px; }
+  .sl-head span { margin-right: auto; font-size: 14px; font-weight: 600; }
+  .sl-head output { font: 500 14px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--accent); }
+  .sl-reset { width: 34px; height: 34px; padding: 0; border-radius: 50%; font-size: 17px; line-height: 1; }
+  .sl-msg { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+
+  .sl input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 38px; margin: 0; background: transparent; touch-action: none; }
+  .sl input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--accent) var(--p, 50%), var(--line) var(--p, 50%)); }
+  .sl input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 26px; height: 26px; margin-top: -11px; border: 0; border-radius: 50%; background: var(--fg); box-shadow: 0 1px 5px rgba(0, 0, 0, 0.6); }
+  .sl input[type=range]::-moz-range-track { height: 4px; border-radius: 2px; background: var(--line); }
+  .sl input[type=range]::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--accent); }
+  .sl input[type=range]::-moz-range-thumb { width: 26px; height: 26px; border: 0; border-radius: 50%; background: var(--fg); }
+
+  .params {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-block: 4px 8px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .params::-webkit-scrollbar { display: none; }
+  .pchip {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 46px;
+    padding: 6px 14px;
+    border-radius: 23px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .pchip .v { font: 400 11px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted); }
+  .pchip[aria-pressed=true] { background: var(--fg); border-color: var(--fg); color: var(--bg); font-weight: 600; }
+  .pchip[aria-pressed=true] .v { color: var(--bg); opacity: 0.7; }
+
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    border-top: 1px solid var(--line);
+    padding-block: 4px 6px;
+    padding-left: max(8px, env(safe-area-inset-left, 0px));
+    padding-right: max(8px, env(safe-area-inset-right, 0px));
+  }
+  .tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    min-height: 54px;
+    padding: 6px 0 4px;
+    border: 0;
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .tab svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .tab[aria-selected=true] { color: var(--accent); }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app">
+  <input type="file" id="file" accept="image/*" class="vh" tabindex="-1">
+  <div class="topbar">
+    <span class="name">Prisma Lab</span>
+    <button type="button" class="cmp">Originale</button>
+    <label class="btn" for="file">Carica</label>
+    <button type="button" class="dl primary" data-t="Scarica">Scarica</button>
+  </div>
+  <div class="stage" id="stage">
+    <canvas id="gl" aria-label="Foto vista attraverso il prisma montato davanti all'obiettivo"></canvas>
+    <div class="actions">
+      <label class="btn primary" for="file">Carica foto</label>
+      <button type="button" class="cmp">Originale</button>
+      <button type="button" class="dl" data-t="Scarica">Scarica</button>
+    </div>
+    <div class="hint"><span id="hint-t">Trascina: inclina il filtro · Maiusc+trascina: sposta · rotella: distanza dall'obiettivo · rilascia qui una foto</span><br>Raffinamento <b id="prog">0/48</b> · uscita <b id="dim">—</b></div>
+    <div class="fallback" id="fallback" hidden>Questo browser non supporta WebGL2, necessario per l'anteprima.</div>
+    <div class="err" id="err" hidden></div>
+  </div>
+
+  <aside class="panel">
+    <header>
+      <h1>Prisma Lab</h1>
+      <div class="spectrum"></div>
+      <p class="sub">Filtro a prisma montato davanti all'obiettivo. I raggi partono dall'apertura, attraversano il vetro e vanno a cercare la foto, come in una fotocamera vera.</p>
+    </header>
+
+    <section>
+      <h2>Look</h2>
+      <div class="chips" id="presets"></div>
+    </section>
+
+    <section id="grp-prisma"><h2>Prisma (mm)</h2></section>
+    <section id="grp-vetro"><h2>Vetro</h2></section>
+    <section id="grp-ottica"><h2>Fotocamera</h2></section>
+    <section id="grp-pos"><h2>Posizione del filtro</h2>
+      <label class="check" for="auto"><input type="checkbox" id="auto">Rotazione automatica</label>
+    </section>
+
+    <section>
+      <h2>Immagine</h2>
+      <label class="check" for="mirror"><input type="checkbox" id="mirror" checked>Specchia i bordi della foto</label>
+      <div class="chips">
+        <label class="btn primary" for="file">Carica foto</label>
+        <button type="button" class="dl" data-t="Scarica">Scarica</button>
+        <button type="button" id="sample">Immagine di esempio</button>
+        <button type="button" id="reset">Azzera posizione</button>
+      </div>
+    </section>
+
+    <p class="note">Ogni pixel è una media di raggi con lunghezza d'onda, punto d'apertura e riflessi scelti a caso: rifrazione, riflessione interna totale, riflessi di Fresnel e dispersione continua. L'immagine si affina da sola quando smetti di muovere. La foto è trattata come una scena all'infinito, messa a fuoco.</p>
+  </aside>
+
+  <div class="editor" id="editor">
+    <div class="sl">
+      <div class="sl-ctrl" id="m-ctrl">
+        <div class="sl-head">
+          <span id="m-label">Angolo facce</span>
+          <output id="m-val" for="m-range"></output>
+          <button type="button" class="sl-reset" id="m-reset" aria-label="Ripristina il valore iniziale">&#8634;</button>
+        </div>
+        <input type="range" id="m-range" aria-labelledby="m-label">
+      </div>
+      <p class="sl-msg" id="m-msg" hidden></p>
+    </div>
+    <div class="params" id="m-params" role="toolbar" aria-label="Parametri"></div>
+    <nav class="tabs" id="m-tabs" role="tablist" aria-label="Strumenti"></nav>
+  </div>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var canvas = $('gl'), stage = $('stage');
+  var gl = canvas.getContext('webgl2', { antialias: false, alpha: false, preserveDrawingBuffer: true });
+  if (!gl) { $('fallback').hidden = false; return; }
+
+  function showErr(msg) { var e = $('err'); e.textContent = msg; e.hidden = false; }
+
+  /* ---------- Shader ---------- */
+  var VS = [
+    '#version 300 es',
+    'void main(){',
+    '  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));',
+    '  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);',
+    '}'
+  ].join('\n');
+
+  /* Camera nell'origine, guarda verso -z. Il prisma sta davanti all'obiettivo (unita: mm).
+     Spazio oggetto: faccia piana d'ingresso a z=+h (lato obiettivo), faccette inclinate
+     verso -z, piccola faccia piana d'uscita a z=-h. */
+  var FS = [
+    '#version 300 es',
+    'precision highp float;',
+    'uniform vec2 uRes;',
+    'uniform sampler2D uTex;',
+    'uniform float uImgAspect, uLod, uIor, uDisp, uF, uAp, uSeed, uWScale, uMirror, uBypass;',
+    'uniform vec3 uC, uWnorm;',
+    'uniform mat3 uRot;',
+    'uniform vec4 uPl[10];',
+    'uniform int uN, uS;',
+    'out vec4 outColor;',
+    '',
+    'float hash13(vec3 p3){ p3 = fract(p3 * 0.1031); p3 += dot(p3, p3.zyx + 31.32); return fract((p3.x + p3.y) * p3.z); }',
+    'float rnd(float k){ return hash13(vec3(gl_FragCoord.xy, uSeed + k)); }',
+    '',
+    'float fresnel(float ci, float n1, float n2){',
+    '  ci = clamp(ci, 0.0, 1.0);',
+    '  float st = n1 / n2 * sqrt(max(0.0, 1.0 - ci * ci));',
+    '  if (st >= 1.0) return 1.0;',
+    '  float ct = sqrt(1.0 - st * st);',
+    '  float rs = (n1 * ci - n2 * ct) / (n1 * ci + n2 * ct);',
+    '  float rp = (n1 * ct - n2 * ci) / (n1 * ct + n2 * ci);',
+    '  return 0.5 * (rs * rs + rp * rp);',
+    '}',
+    '',
+    'void slab(vec3 ro, vec3 rd, out float tn, out float tf, out vec3 nn, out vec3 nf){',
+    '  tn = -1e9; tf = 1e9; nn = vec3(0.0, 0.0, 1.0); nf = vec3(0.0, 0.0, 1.0);',
+    '  for (int i = 0; i < 10; i++) {',
+    '    if (i >= uN) break;',
+    '    vec3 n = uPl[i].xyz; float d = uPl[i].w;',
+    '    float den = dot(n, rd); float num = d - dot(n, ro);',
+    '    if (abs(den) < 1e-6) { if (num < 0.0) { tn = 1e9; tf = -1e9; } continue; }',
+    '    float t = num / den;',
+    '    if (den < 0.0) { if (t > tn) { tn = t; nn = n; } }',
+    '    else { if (t < tf) { tf = t; nf = n; } }',
+    '  }',
+    '}',
+    '',
+    '// Percorso di un raggio attraverso il prisma. Ritorna false se il raggio e perso (riflesso verso la camera).',
+    'bool prismPath(vec3 ro, vec3 rd, float ior, float sd, out vec3 dir){',
+    '  vec3 oo = (ro - uC) * uRot; vec3 od = rd * uRot;',
+    '  float tn, tf; vec3 nn, nf;',
+    '  slab(oo, od, tn, tf, nn, nf);',
+    '  dir = rd;',
+    '  if (tn >= tf || tf <= 0.0) return true;',
+    '  vec3 p, d;',
+    '  if (tn > 0.0) {',
+    '    p = oo + od * tn;',
+    '    float F = fresnel(-dot(od, nn), 1.0, ior);',
+    '    if (rnd(sd) < F) return false;',
+    '    d = refract(od, nn, 1.0 / ior);',
+    '  } else { p = oo; d = od; }',
+    '  for (int k = 0; k < 8; k++) {',
+    '    p += d * 1e-3;',
+    '    float a, b; vec3 na, nb;',
+    '    slab(p, d, a, b, na, nb);',
+    '    p += d * b;',
+    '    float F = fresnel(dot(d, nb), ior, 1.0);',
+    '    if (rnd(sd + 1.0 + float(k)) >= F) {',
+    '      vec3 r = refract(d, -nb, ior);',
+    '      if (dot(r, r) > 0.0) { dir = normalize(uRot * r); return true; }',
+    '    }',
+    '    d = reflect(d, nb);',
+    '  }',
+    '  return false;',
+    '}',
+    '',
+    'vec3 env(vec3 d){',
+    '  if (d.z > -0.02) return vec3(0.0);',
+    '  float va = uRes.x / uRes.y;',
+    '  vec2 pn = d.xy / (-d.z) * uF / 18.0;',
+    '  float hI = max(2.0 / va, 2.0 / uImgAspect);',
+    '  vec2 uv = pn / vec2(hI * uImgAspect, hI) + 0.5;',
+    '  if (uMirror > 0.5) uv = 1.0 - abs(1.0 - mod(uv, 2.0));',
+    '  else if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return vec3(0.0);',
+    '  return pow(textureLod(uTex, uv, uLod).rgb, vec3(2.2));',
+    '}',
+    '',
+    'vec3 spectral(float l){',
+    '  float r = (l - 0.85) / 0.27, g = (l - 0.5) / 0.2, b = (l - 0.15) / 0.27;',
+    '  return vec3(exp(-r * r), exp(-g * g), exp(-b * b)) * uWnorm;',
+    '}',
+    '',
+    'void main(){',
+    '  float va = uRes.x / uRes.y;',
+    '  vec2 ndc = (gl_FragCoord.xy / uRes) * 2.0 - 1.0;',
+    '  vec3 rd = normalize(vec3(ndc.x * 18.0, ndc.y * 18.0 / va, -uF));',
+    '  float rot = hash13(vec3(gl_FragCoord.xy, uSeed * 0.37 + 3.1)) * 6.2831853;',
+    '  float rotL = hash13(vec3(gl_FragCoord.xy, uSeed * 0.71 + 9.7));',
+    '  vec3 acc = vec3(0.0);',
+    '  for (int s = 0; s < 16; s++) {',
+    '    if (s >= uS) break;',
+    '    float fs = float(s);',
+    '    float r = sqrt((fs + 0.5) / float(uS)) * uAp;',
+    '    float th = fs * 2.39996323 + rot;',
+    '    vec3 o = vec3(r * cos(th), r * sin(th), 0.0);',
+    '    float l = fract(rotL + float((s * 3) % uS) / float(uS));',
+    '    float ior = uIor + uDisp * (1.0 - 2.0 * l);',
+    '    vec3 dir = rd;',
+    '    bool ok = true;',
+    '    if (uBypass < 0.5) ok = prismPath(o, rd, ior, fs * 16.0, dir);',
+    '    if (ok) acc += env(dir) * spectral(l);',
+    '  }',
+    '  outColor = vec4(acc / float(uS) * uWScale, 1.0);',
+    '}'
+  ].join('\n');
+
+  var BLIT = [
+    '#version 300 es',
+    'precision highp float;',
+    'uniform sampler2D uAcc;',
+    'uniform vec2 uRes;',
+    'uniform float uGain;',
+    'out vec4 outColor;',
+    'void main(){',
+    '  vec3 c = texture(uAcc, gl_FragCoord.xy / uRes).rgb * uGain;',
+    '  outColor = vec4(pow(clamp(c, 0.0, 1.0), vec3(1.0 / 2.2)), 1.0);',
+    '}'
+  ].join('\n');
+
+  function compile(type, src) {
+    var s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { showErr(gl.getShaderInfoLog(s)); throw new Error('shader'); }
+    return s;
+  }
+  function makeProg(fsSrc, names) {
+    var p = gl.createProgram();
+    gl.attachShader(p, compile(gl.VERTEX_SHADER, VS));
+    gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fsSrc));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) { showErr(gl.getProgramInfoLog(p)); throw new Error('link'); }
+    var u = {};
+    names.forEach(function (n) { u[n] = gl.getUniformLocation(p, n); });
+    return { p: p, u: u };
+  }
+  var T = makeProg(FS, ['uRes', 'uTex', 'uImgAspect', 'uLod', 'uIor', 'uDisp', 'uF', 'uAp', 'uSeed', 'uWScale', 'uMirror', 'uBypass', 'uC', 'uWnorm', 'uRot', 'uPl', 'uN', 'uS']);
+  var B = makeProg(BLIT, ['uAcc', 'uRes', 'uGain']);
+
+  /* Normalizzazione dei pesi spettrali: la media su l in [0,1] vale 1 per ogni canale (foto bianca resta bianca) */
+  function g(x, m, s) { var z = (x - m) / s; return Math.exp(-z * z); }
+  var wsum = [0, 0, 0], NST = 2000;
+  for (var i = 0; i < NST; i++) {
+    var l = (i + 0.5) / NST;
+    wsum[0] += g(l, 0.85, 0.27); wsum[1] += g(l, 0.5, 0.2); wsum[2] += g(l, 0.15, 0.27);
+  }
+  var WNORM = [NST / wsum[0], NST / wsum[1], NST / wsum[2]];
+
+  /* ---------- Accumulo progressivo ---------- */
+  var accTex = null, accFbo = null, floatMode = false;
+  var extF = gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float');
+  function makeAcc(w, h) {
+    if (accTex) gl.deleteTexture(accTex);
+    if (accFbo) gl.deleteFramebuffer(accFbo);
+    accTex = gl.createTexture(); accFbo = gl.createFramebuffer();
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, accTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    var ok = false;
+    if (extF) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, accFbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, accTex, 0);
+      ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    }
+    if (!ok) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, accFbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, accTex, 0);
+    }
+    floatMode = ok;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  /* ---------- Texture foto ---------- */
+  var tex = gl.createTexture();
+  var texW = 1600, texH = 1000, imgAspect = 1.6, origW = 1600, origH = 1000;
+  var dirty = true, frameIdx = 0;
+  function uploadSource(src, w, h) {
+    var m = Math.min(1, Math.min(4096, gl.getParameter(gl.MAX_TEXTURE_SIZE)) / Math.max(w, h));
+    var c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w * m)); c.height = Math.max(1, Math.round(h * m));
+    c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    texW = c.width; texH = c.height; imgAspect = c.width / c.height;
+    origW = w; origH = h;
+    $('dim').textContent = w + '×' + h;
+    resize();
+    dirty = true;
+  }
+
+  function makeScene() {
+    var W = 1600, H = 1000, c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    var x = c.getContext('2d');
+    var s = 7;
+    function rnd() {
+      s |= 0; s = (s + 0x6D2B79F5) | 0;
+      var t = Math.imul(s ^ (s >>> 15), 1 | s);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    }
+    var gr = x.createLinearGradient(0, 0, 0, H * 0.72);
+    gr.addColorStop(0, '#150c3a'); gr.addColorStop(0.4, '#6b2a8f');
+    gr.addColorStop(0.75, '#ff6f4f'); gr.addColorStop(1, '#ffc772');
+    x.fillStyle = gr; x.fillRect(0, 0, W, H);
+    x.fillStyle = '#fff';
+    for (var i = 0; i < 170; i++) { x.globalAlpha = 0.3 + rnd() * 0.7; x.fillRect(rnd() * W, rnd() * H * 0.42, 2, 2); }
+    x.globalAlpha = 1;
+    var sx = W * 0.5, sy = H * 0.5, sr = H * 0.2;
+    var glow = x.createRadialGradient(sx, sy, sr * 0.8, sx, sy, sr * 2.4);
+    glow.addColorStop(0, 'rgba(255,200,120,0.6)'); glow.addColorStop(1, 'rgba(255,200,120,0)');
+    x.fillStyle = glow; x.fillRect(0, 0, W, H);
+    var sg = x.createLinearGradient(0, sy - sr, 0, sy + sr);
+    sg.addColorStop(0, '#fff1a8'); sg.addColorStop(1, '#ff5f8d');
+    x.fillStyle = sg; x.beginPath(); x.arc(sx, sy, sr, 0, Math.PI * 2); x.fill();
+    x.strokeStyle = '#5ff2ff'; x.lineWidth = 6;
+    x.beginPath(); x.arc(sx, sy, sr * 1.28, 0, Math.PI * 2); x.stroke();
+    function ridge(base, amp, col, seed) {
+      x.fillStyle = col; x.beginPath(); x.moveTo(0, H);
+      for (var px = 0; px <= W; px += 20) {
+        var y = base - amp * (Math.sin(px * 0.004 + seed) + 0.5 * Math.sin(px * 0.011 + seed * 2.3) + 0.25 * Math.sin(px * 0.027 + seed * 4));
+        x.lineTo(px, y);
+      }
+      x.lineTo(W, H); x.closePath(); x.fill();
+    }
+    ridge(H * 0.68, 70, '#4b1f6e', 1); ridge(H * 0.75, 60, '#2c1450', 3.7);
+    var px = 0;
+    while (px < W) {
+      var bw = 50 + rnd() * 90, bh = H * (0.12 + rnd() * 0.3), top = H - bh;
+      x.fillStyle = '#0d0a24'; x.fillRect(px, top, bw, bh);
+      for (var wy = top + 12; wy < H - 10; wy += 22)
+        for (var wx = px + 8; wx < px + bw - 12; wx += 16)
+          if (rnd() < 0.45) { x.fillStyle = rnd() < 0.7 ? '#ffd37a' : '#6ff0ff'; x.fillRect(wx, wy, 8, 12); }
+      px += bw + 4 + rnd() * 6;
+    }
+    x.strokeStyle = '#0d0a24'; x.lineWidth = 5;
+    x.beginPath(); x.moveTo(W * 0.22, H * 0.46); x.lineTo(W * 0.22, H * 0.8); x.stroke();
+    x.fillStyle = '#ff3b5c'; x.beginPath(); x.arc(W * 0.22, H * 0.46, 8, 0, Math.PI * 2); x.fill();
+    x.fillStyle = '#ffffff'; x.font = '600 54px "JetBrains Mono", monospace';
+    x.fillText('MILANO 45.46°N', 60, 110);
+    return c;
+  }
+  var sceneCanvas = makeScene();
+  function loadSample() { uploadSource(sceneCanvas, sceneCanvas.width, sceneCanvas.height); }
+
+  function loadFile(file) {
+    if (!file || file.type.indexOf('image/') !== 0) return;
+    var url = URL.createObjectURL(file), img = new Image();
+    img.onload = function () { uploadSource(img, img.naturalWidth, img.naturalHeight); URL.revokeObjectURL(url); };
+    img.onerror = function () { URL.revokeObjectURL(url); };
+    img.src = url;
+  }
+
+  /* ---------- Parametri e pannello ---------- */
+  function f1(v) { return v.toFixed(1); }
+  var DEFS = [
+    { g: 'prisma', id: 'sides', label: 'Lati', min: 3, max: 8, step: 1, val: 5, fmt: function (v) { return String(v); } },
+    { g: 'prisma', id: 'tilt', label: 'Angolo facce', min: 0, max: 75, step: 1, val: 54, fmt: function (v) { return v + '°'; } },
+    { g: 'prisma', id: 'thick', label: 'Spessore', min: 6, max: 60, step: 0.5, val: 24, fmt: function (v) { return f1(v) + ' mm'; } },
+    { g: 'prisma', id: 'radius', label: 'Raggio del filtro', min: 15, max: 60, step: 0.5, val: 41, fmt: function (v) { return f1(v) + ' mm'; } },
+    { g: 'vetro', id: 'ior', label: 'Indice di rifrazione', min: 1, max: 2.4, step: 0.01, val: 1.52, fmt: function (v) { return v.toFixed(2); } },
+    { g: 'vetro', id: 'disp', label: 'Dispersione', min: 0, max: 0.12, step: 0.001, val: 0.008, fmt: function (v) { return v.toFixed(3); } },
+    { g: 'ottica', id: 'focal', label: 'Focale', min: 14, max: 135, step: 1, val: 28, fmt: function (v) { return v + ' mm'; } },
+    { g: 'ottica', id: 'fstop', label: 'Diaframma', min: 1.4, max: 16, step: 0.1, val: 2.8, fmt: function (v) { return 'f/' + f1(v); } },
+    { g: 'ottica', id: 'gap', label: 'Distanza dal filtro', min: 3, max: 120, step: 0.5, val: 22, fmt: function (v) { return f1(v) + ' mm'; } },
+    { g: 'pos', id: 'offx', label: 'Spostamento X', min: -50, max: 50, step: 0.5, val: 0, fmt: function (v) { return f1(v) + ' mm'; } },
+    { g: 'pos', id: 'offy', label: 'Spostamento Y', min: -50, max: 50, step: 0.5, val: 0, fmt: function (v) { return f1(v) + ' mm'; } },
+    { g: 'pos', id: 'roll', label: 'Rotazione del filtro', min: -180, max: 180, step: 1, val: 0, fmt: function (v) { return v + '°'; } }
+  ];
+  var P = {}, DEF = {};
+  DEFS.forEach(function (d) {
+    DEF[d.id] = d; P[d.id] = d.val;
+    var row = document.createElement('div'); row.className = 'row';
+    var lab = document.createElement('label'); lab.htmlFor = d.id; lab.textContent = d.label;
+    var out = document.createElement('output'); out.id = d.id + '-v'; out.htmlFor = d.id; out.textContent = d.fmt(d.val);
+    var inp = document.createElement('input');
+    inp.type = 'range'; inp.id = d.id; inp.min = d.min; inp.max = d.max; inp.step = d.step; inp.value = d.val;
+    inp.addEventListener('input', function () { setParam(d.id, parseFloat(inp.value), 'd'); });
+    row.appendChild(lab); row.appendChild(out); row.appendChild(inp);
+    $('grp-' + d.g).appendChild(row);
+  });
+  var SHORT = { sides: 'Lati', tilt: 'Angolo', thick: 'Spessore', radius: 'Raggio', ior: 'Indice', disp: 'Dispersione',
+    focal: 'Focale', fstop: 'Diaframma', gap: 'Distanza', offx: 'Sposta X', offy: 'Sposta Y', roll: 'Rotazione' };
+
+  /* Unica funzione che cambia un parametro: aggiorna pannello desktop, chip e slider del telefono. */
+  var mActive = 'tilt', chipVals = {};
+  function setParam(id, v, src) {
+    var d = DEF[id];
+    v = Math.min(d.max, Math.max(d.min, v));
+    P[id] = v;
+    if (src !== 'd') $(id).value = v;
+    $(id + '-v').textContent = d.fmt(v);
+    if (chipVals[id]) chipVals[id].textContent = d.fmt(v);
+    if (id === mActive) {
+      if (src !== 'm') $('m-range').value = v;
+      $('m-val').textContent = d.fmt(v);
+      updateFill();
+    }
+    dirty = true;
+  }
+  function updateFill() {
+    var d = DEF[mActive];
+    $('m-range').style.setProperty('--p', ((P[mActive] - d.min) / (d.max - d.min) * 100) + '%');
+  }
+
+  var PRESETS = {
+    'Caleidoscopio': { sides: 6, tilt: 56, thick: 24, radius: 41, ior: 1.55, disp: 0.01, focal: 24, fstop: 4, gap: 25 },
+    'Cristallo': { sides: 4, tilt: 40, thick: 40, radius: 38, ior: 1.9, disp: 0.02, focal: 35, fstop: 2.8, gap: 18 },
+    'Cuneo': { sides: 3, tilt: 62, thick: 22, radius: 41, ior: 1.5, disp: 0.008, focal: 28, fstop: 5.6, gap: 22 }
+  };
+  function applyPreset(name) {
+    var p = PRESETS[name];
+    Object.keys(p).forEach(function (k) { setParam(k, p[k]); });
+  }
+  Object.keys(PRESETS).forEach(function (name) {
+    var b = document.createElement('button'); b.type = 'button'; b.textContent = name;
+    b.addEventListener('click', function () { applyPreset(name); });
+    $('presets').appendChild(b);
+  });
+
+  /* ---------- Editor da telefono: schede, chip, slider unico ---------- */
+  var CATS = [
+    { id: 'look', label: 'Look', icon: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.5 2.5M15.2 15.2l2.5 2.5M6.3 17.7l2.5-2.5M15.2 8.8l2.5-2.5"/>' },
+    { id: 'prisma', label: 'Prisma', icon: '<path d="M12 4l8.5 15h-17z"/><path d="M12 4v15"/>' },
+    { id: 'vetro', label: 'Vetro', icon: '<path d="M12 3c3 4.2 6 7.6 6 11a6 6 0 0 1-12 0c0-3.4 3-6.8 6-11z"/>' },
+    { id: 'ottica', label: 'Ottica', icon: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5"/>' },
+    { id: 'pos', label: 'Posizione', icon: '<path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/>' },
+    { id: 'opz', label: 'Opzioni', icon: '<path d="M4 7h9M18 7h2M4 17h3M12 17h8"/><circle cx="15.5" cy="7" r="2.3"/><circle cx="9.5" cy="17" r="2.3"/>' }
+  ];
+  var lastInCat = { prisma: 'tilt', vetro: 'ior', ottica: 'fstop', pos: 'roll' };
+  var mTabs = $('m-tabs'), mParams = $('m-params'), mRange = $('m-range');
+  CATS.forEach(function (c) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'tab'; b.setAttribute('role', 'tab'); b.dataset.cat = c.id;
+    b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + c.icon + '</svg><span>' + c.label + '</span>';
+    b.addEventListener('click', function () { selectCat(c.id); });
+    mTabs.appendChild(b);
+  });
+  function chip(label, value, pressed, onTap) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'pchip';
+    if (pressed !== null) b.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+    var t = document.createElement('span'); t.textContent = label; b.appendChild(t);
+    var v = null;
+    if (value !== null) { v = document.createElement('span'); v.className = 'v'; v.textContent = value; b.appendChild(v); }
+    b.addEventListener('click', function () { onTap(b); });
+    mParams.appendChild(b);
+    return { b: b, v: v };
+  }
+  function showMsg(text) { $('m-ctrl').hidden = true; $('m-msg').hidden = false; $('m-msg').textContent = text; }
+  function selectCat(id) {
+    Array.prototype.forEach.call(mTabs.children, function (b) { b.setAttribute('aria-selected', b.dataset.cat === id ? 'true' : 'false'); });
+    mParams.innerHTML = ''; chipVals = {};
+    mParams.scrollLeft = 0;
+    if (id === 'look') {
+      Object.keys(PRESETS).forEach(function (name) { chip(name, null, null, function () { applyPreset(name); }); });
+      showMsg('Scegli un punto di partenza, poi rifinisci nelle altre schede.');
+      return;
+    }
+    if (id === 'opz') {
+      [['Rotazione automatica', 'auto'], ['Specchia i bordi', 'mirror']].forEach(function (o) {
+        var cb = $(o[1]);
+        chip(o[0], null, cb.checked, function (b) {
+          cb.checked = !cb.checked; cb.dispatchEvent(new Event('change'));
+          b.setAttribute('aria-pressed', cb.checked ? 'true' : 'false');
+        });
+      });
+      chip('Azzera posizione', null, null, resetPos);
+      chip('Immagine di esempio', null, null, loadSample);
+      showMsg('Tieni premuto «Originale» in alto per confrontare con la foto senza filtro.');
+      return;
+    }
+    $('m-ctrl').hidden = false; $('m-msg').hidden = true;
+    DEFS.forEach(function (d) {
+      if (d.g !== id) return;
+      var c = chip(SHORT[d.id], d.fmt(P[d.id]), false, function () { selectParam(d.id); });
+      c.b.dataset.p = d.id;
+      chipVals[d.id] = c.v;
+    });
+    selectParam(lastInCat[id]);
+  }
+  function selectParam(id) {
+    var d = DEF[id];
+    mActive = id; lastInCat[d.g] = id;
+    Array.prototype.forEach.call(mParams.children, function (b) {
+      var on = b.dataset.p === id;
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (on && b.scrollIntoView) b.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
+    mRange.min = d.min; mRange.max = d.max; mRange.step = d.step; mRange.value = P[id];
+    $('m-label').textContent = d.label;
+    $('m-val').textContent = d.fmt(P[id]);
+    updateFill();
+  }
+  mRange.addEventListener('input', function () { setParam(mActive, parseFloat(mRange.value), 'm'); });
+  $('m-reset').addEventListener('click', function () { setParam(mActive, DEF[mActive].val); });
+
+  /* ---------- Posizione del filtro ---------- */
+  var yaw = 0.1, pitch = 0.06, vYaw = 0, vPitch = 0;
+  var dragging = false, moving = false, lastX = 0, lastY = 0, lastT = 0;
+  var auto = false;
+
+  function mul(a, b) {
+    var r = new Array(9);
+    for (var c = 0; c < 3; c++) for (var q = 0; q < 3; q++)
+      r[c * 3 + q] = a[q] * b[c * 3] + a[3 + q] * b[c * 3 + 1] + a[6 + q] * b[c * 3 + 2];
+    return r;
+  }
+  function rotX(a) { var c = Math.cos(a), s = Math.sin(a); return [1, 0, 0, 0, c, s, 0, -s, c]; }
+  function rotY(a) { var c = Math.cos(a), s = Math.sin(a); return [c, 0, -s, 0, 1, 0, s, 0, c]; }
+  function rotZ(a) { var c = Math.cos(a), s = Math.sin(a); return [c, s, 0, -s, c, 0, 0, 0, 1]; }
+
+  /* Gesti: 1 dito inclina il filtro (con inerzia); 2 dita lo spostano, avvicinano/allontanano (pizzico) e ruotano. */
+  var ptrs = new Map(), pair = null, multi = false;
+  function pairState() {
+    var a = Array.from(ptrs.values());
+    return { cx: (a[0].x + a[1].x) / 2, cy: (a[0].y + a[1].y) / 2,
+      d: Math.max(10, Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y)), ang: Math.atan2(a[1].y - a[0].y, a[1].x - a[0].x) };
+  }
+  function oneLeft(t) {
+    var p = ptrs.values().next().value;
+    lastX = p.x; lastY = p.y; lastT = t;
+  }
+  canvas.addEventListener('pointerdown', function (e) {
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    dragging = true; vYaw = vPitch = 0;
+    canvas.classList.add('dragging');
+    if (ptrs.size === 1) { moving = e.shiftKey; multi = false; oneLeft(e.timeStamp); }
+    else if (ptrs.size === 2) { multi = true; pair = pairState(); }
+  });
+  canvas.addEventListener('pointermove', function (e) {
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (ptrs.size >= 2) {
+      if (!pair) return;
+      var s = pairState();
+      setParam('offx', P.offx + (s.cx - pair.cx) * 0.12);
+      setParam('offy', P.offy - (s.cy - pair.cy) * 0.12);
+      setParam('gap', P.gap * pair.d / s.d);
+      var da = s.ang - pair.ang;
+      if (da > Math.PI) da -= 2 * Math.PI; if (da < -Math.PI) da += 2 * Math.PI;
+      var r = P.roll + da * 180 / Math.PI;
+      setParam('roll', ((r + 180) % 360 + 360) % 360 - 180);
+      pair = s;
+      return;
+    }
+    if (multi) return;
+    var dx = e.clientX - lastX, dy = e.clientY - lastY;
+    if (moving) {
+      setParam('offx', P.offx + dx * 0.12);
+      setParam('offy', P.offy - dy * 0.12);
+    } else {
+      var dt = Math.max(0.008, (e.timeStamp - lastT) / 1000), k = 0.006;
+      yaw += dx * k; pitch += dy * k;
+      vYaw = 0.5 * vYaw + 0.5 * Math.max(-8, Math.min(8, dx * k / dt));
+      vPitch = 0.5 * vPitch + 0.5 * Math.max(-8, Math.min(8, dy * k / dt));
+    }
+    lastX = e.clientX; lastY = e.clientY; lastT = e.timeStamp;
+    dirty = true;
+  });
+  function endPtr(e) {
+    if (!ptrs.has(e.pointerId)) return;
+    ptrs.delete(e.pointerId);
+    if (ptrs.size >= 2) { pair = pairState(); return; }
+    pair = null;
+    if (ptrs.size === 1) { vYaw = vPitch = 0; oneLeft(e.timeStamp); return; }
+    dragging = false; canvas.classList.remove('dragging');
+    if (multi || moving || e.timeStamp - lastT > 80) { vYaw = vPitch = 0; }
+  }
+  canvas.addEventListener('pointerup', endPtr);
+  canvas.addEventListener('pointercancel', endPtr);
+  canvas.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    setParam('gap', P.gap + e.deltaY * 0.04);
+  }, { passive: false });
+
+  function resetPos() {
+    yaw = pitch = vYaw = vPitch = 0;
+    setParam('roll', 0); setParam('offx', 0); setParam('offy', 0);
+  }
+  $('auto').addEventListener('change', function (e) { auto = e.target.checked; dirty = true; });
+  $('mirror').addEventListener('change', function () { dirty = true; });
+  $('reset').addEventListener('click', resetPos);
+  $('sample').addEventListener('click', loadSample);
+  $('file').addEventListener('change', function (e) { loadFile(e.target.files[0]); e.target.value = ''; });
+  ['dragenter', 'dragover'].forEach(function (n) {
+    stage.addEventListener(n, function (e) { e.preventDefault(); stage.classList.add('drop'); });
+  });
+  ['dragleave', 'drop'].forEach(function (n) {
+    stage.addEventListener(n, function (e) { e.preventDefault(); stage.classList.remove('drop'); });
+  });
+  stage.addEventListener('drop', function (e) { if (e.dataTransfer && e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+
+  /* ---------- Geometria del prisma (spazio oggetto, mm) ---------- */
+  function buildPlanes() {
+    var n = Math.round(P.sides), R = P.radius, Tk = P.thick, h = Tk / 2;
+    var tMax = Math.atan((0.85 * R) / Tk);
+    var t = Math.min(P.tilt * Math.PI / 180, tMax);
+    var rin = Math.max(0.5, R - Tk * Math.tan(t));
+    var out = new Float32Array(40), ct = Math.cos(t), st = Math.sin(t);
+    for (var i = 0; i < n; i++) {
+      var th = (2 * Math.PI * i) / n + Math.PI / 2;
+      out.set([Math.cos(th) * ct, Math.sin(th) * ct, -st, rin * ct + h * st], i * 4);
+    }
+    out.set([0, 0, 1, h], n * 4);
+    out.set([0, 0, -1, h], (n + 1) * 4);
+    return { data: out, count: n + 2 };
+  }
+
+  /* ---------- Rendering ---------- */
+  var MAXACC = 48, SPP = 8, SPP_MOVE = 3, EXPORT_FRAMES = 32, exporting = false, bypass = false, lastChange = 0;
+  var coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  /* La tela ha sempre le proporzioni della foto: il fotogramma coincide con l'immagine originale. */
+  function resize() {
+    if (exporting) return;
+    var sw = stage.clientWidth, sh = stage.clientHeight;
+    if (!sw || !sh) return;
+    var dw = Math.min(sw, sh * imgAspect), dh = dw / imgAspect;
+    canvas.style.width = dw + 'px'; canvas.style.height = dh + 'px';
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var pw = dw * dpr, ph = dh * dpr;
+    var maxPx = coarse ? 1.4e6 : 2.2e6, f = Math.min(1, Math.sqrt(maxPx / Math.max(1, pw * ph)));
+    var cw = Math.max(1, Math.round(pw * f)), ch = Math.max(1, Math.round(ph * f));
+    if (canvas.width !== cw || canvas.height !== ch || !accTex) {
+      canvas.width = cw; canvas.height = ch; makeAcc(cw, ch); dirty = true;
+    }
+  }
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
+  window.addEventListener('resize', resize);
+
+  function tracePass(k, w, h, strip, spp, byp) {
+    var roll = P.roll * Math.PI / 180;
+    var R = mul(rotX(pitch), mul(rotY(yaw), rotZ(roll)));
+    var pl = buildPlanes();
+    var va = w / h;
+    var visTexW = Math.min(texW, texH * va);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, accFbo);
+    gl.viewport(0, 0, w, h);
+    gl.useProgram(T.p);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex);
+    var u = T.u;
+    gl.uniform1i(u.uTex, 0);
+    gl.uniform2f(u.uRes, w, h);
+    gl.uniform1f(u.uImgAspect, imgAspect);
+    gl.uniform1f(u.uLod, Math.max(0, Math.log2(visTexW / w)));
+    gl.uniform1f(u.uIor, P.ior);
+    gl.uniform1f(u.uDisp, P.disp);
+    gl.uniform1f(u.uF, P.focal);
+    gl.uniform1f(u.uAp, P.focal / (2 * P.fstop));
+    gl.uniform1f(u.uSeed, k * 131 + 17);
+    gl.uniform1f(u.uWScale, floatMode ? 1 : 1 / 3);
+    gl.uniform1f(u.uMirror, $('mirror').checked ? 1 : 0);
+    gl.uniform3f(u.uC, P.offx, P.offy, -(P.gap + P.thick / 2));
+    gl.uniform3f(u.uWnorm, WNORM[0], WNORM[1], WNORM[2]);
+    gl.uniformMatrix3fv(u.uRot, false, new Float32Array(R));
+    gl.uniform4fv(u.uPl, pl.data);
+    gl.uniform1i(u.uN, pl.count);
+    gl.uniform1i(u.uS, spp);
+    gl.uniform1f(u.uBypass, byp ? 1 : 0);
+    if (k === 0) { gl.disable(gl.BLEND); }
+    else {
+      gl.enable(gl.BLEND);
+      gl.blendColor(0, 0, 0, 1 / (k + 1));
+      gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE_MINUS_CONSTANT_ALPHA);
+    }
+    if (strip) {
+      gl.enable(gl.SCISSOR_TEST);
+      for (var y = 0; y < h; y += strip) {
+        gl.scissor(0, y, w, Math.min(strip, h - y));
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        gl.flush();
+      }
+      gl.disable(gl.SCISSOR_TEST);
+    } else {
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    }
+    gl.disable(gl.BLEND);
+  }
+
+  function blit(w, h) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, w, h);
+    gl.useProgram(B.p);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, accTex);
+    gl.uniform1i(B.u.uAcc, 1);
+    gl.uniform2f(B.u.uRes, w, h);
+    gl.uniform1f(B.u.uGain, floatMode ? 1 : 3);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  /* Mentre si muove usa pochi raggi per restare fluido; appena fermo accumula a qualità piena. */
+  function render(k) {
+    var spp = (performance.now() - lastChange < 180) ? SPP_MOVE : SPP;
+    tracePass(k, canvas.width, canvas.height, 0, spp, bypass);
+    blit(canvas.width, canvas.height);
+  }
+
+  var last = 0, progEl = $('prog');
+  function frame(t) {
+    var dt = Math.min(0.05, (t - last) / 1000); last = t;
+    if (exporting) { requestAnimationFrame(frame); return; }
+    if (!dragging) {
+      if (Math.abs(vYaw) > 1e-3 || Math.abs(vPitch) > 1e-3) {
+        yaw += vYaw * dt; pitch += vPitch * dt;
+        var decay = Math.exp(-dt * 3);
+        vYaw *= decay; vPitch *= decay; dirty = true;
+      }
+      if (auto) { yaw += 0.5 * dt; pitch = 0.25 * Math.sin(t / 2600); dirty = true; }
+    }
+    if (dirty) { dirty = false; frameIdx = 0; lastChange = performance.now(); }
+    if (frameIdx < MAXACC) {
+      render(frameIdx); frameIdx++;
+      progEl.textContent = frameIdx + '/' + MAXACC;
+    }
+    requestAnimationFrame(frame);
+  }
+
+  /* ---------- Download del risultato ---------- */
+  var dlBtns = Array.prototype.slice.call(document.querySelectorAll('.dl'));
+  function restoreBtns() { dlBtns.forEach(function (b) { b.textContent = b.dataset.t; }); }
+  function flash(msg) {
+    dlBtns.forEach(function (b) { b.textContent = msg; });
+    setTimeout(restoreBtns, 1800);
+  }
+  function setBtns(text) { dlBtns.forEach(function (b) { b.textContent = text; }); }
+
+  /* Esporta alle dimensioni della foto originale (ridotte solo se superano i limiti della GPU). */
+  /* Schermata finale: foto + pulsanti per salvarla (il tocco sul pulsante e' un gesto diretto, quindi iOS lo accetta). */
+  function showSaveOverlay(blob, name) {
+    var url = URL.createObjectURL(blob);
+    var file = null, canShare = false;
+    try {
+      file = new File([blob], name, { type: 'image/png' });
+      canShare = !!(navigator.canShare && navigator.share && navigator.canShare({ files: [file] }));
+    } catch (_) {}
+    var ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99;background:rgba(8,9,13,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:16px;';
+    var img = document.createElement('img');
+    img.src = url; img.alt = name;
+    img.style.cssText = 'max-width:100%;max-height:68%;object-fit:contain;-webkit-touch-callout:default;-webkit-user-select:auto;user-select:auto;';
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;justify-content:center;';
+    if (canShare) {
+      var sh = document.createElement('button'); sh.type = 'button'; sh.className = 'primary'; sh.textContent = 'Salva in Foto';
+      sh.style.cssText = 'min-height:44px;padding:10px 18px;font-size:15px;';
+      sh.onclick = function () { navigator.share({ files: [file] }).catch(function () {}); };
+      row.appendChild(sh);
+    }
+    var dl = document.createElement('a'); dl.href = url; dl.download = name; dl.className = canShare ? 'btn' : 'btn primary'; dl.textContent = 'Scarica file';
+    dl.style.cssText = 'min-height:44px;padding:10px 18px;font-size:15px;display:inline-flex;align-items:center;text-decoration:none;';
+    row.appendChild(dl);
+    var c = document.createElement('button'); c.type = 'button'; c.textContent = 'Chiudi';
+    c.style.cssText = 'min-height:44px;padding:10px 18px;font-size:15px;';
+    c.onclick = function () { ov.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 1000); };
+    row.appendChild(c);
+    var p = document.createElement('p');
+    p.style.cssText = 'margin:0;color:#e7e9f1;font:500 14px/1.4 var(--font-ui);text-align:center;max-width:420px;';
+    p.textContent = canShare
+      ? 'Premi \u201cSalva in Foto\u201d e scegli \u201cSalva immagine\u201d. Oppure tieni premuta la foto.'
+      : 'Premi \u201cScarica file\u201d, oppure tieni premuta la foto (o clic destro) per salvarla.';
+    ov.appendChild(img); ov.appendChild(row); ov.appendChild(p);
+    document.body.appendChild(ov);
+    restoreBtns();
+  }
+
+  /* Esporta alle dimensioni della foto originale (ridotte solo se superano i limiti della GPU). */
+  function exportImage() {
+    if (exporting) return;
+    var ew = origW, eh = origH;
+    var m = Math.min(1, gl.getParameter(gl.MAX_TEXTURE_SIZE) / Math.max(ew, eh), Math.sqrt(40e6 / (ew * eh)));
+    if (m < 1) { ew = Math.floor(ew * m); eh = Math.floor(eh * m); }
+    exporting = true;
+    canvas.width = ew; canvas.height = eh; makeAcc(ew, eh);
+    var k = 0;
+    function step() {
+      tracePass(k, ew, eh, 512, SPP, false); k++;
+      setBtns(Math.round(k / EXPORT_FRAMES * 100) + '%');
+      if (k < EXPORT_FRAMES) { requestAnimationFrame(step); return; }
+      blit(ew, eh);
+      canvas.toBlob(function (blob) {
+        exporting = false; resize(); dirty = true;
+        if (!blob) { flash('Errore'); return; }
+        showSaveOverlay(blob, 'prisma-lab.png');
+      }, 'image/png');
+    }
+    requestAnimationFrame(step);
+  }
+  dlBtns.forEach(function (b) { b.addEventListener('click', exportImage); });
+
+  /* ---------- Confronto: tieni premuto per vedere la foto senza filtro ---------- */
+  function setBypass(on, b) {
+    if (bypass === on) return;
+    bypass = on; dirty = true;
+    document.querySelectorAll('.cmp').forEach(function (x) { x.classList.toggle('on', on && x === b); });
+  }
+  document.querySelectorAll('.cmp').forEach(function (b) {
+    b.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      try { b.setPointerCapture(e.pointerId); } catch (_) {}
+      setBypass(true, b);
+    });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (n) {
+      b.addEventListener(n, function () { setBypass(false, b); });
+    });
+    b.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    b.addEventListener('keydown', function (e) { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); setBypass(true, b); } });
+    b.addEventListener('keyup', function (e) { if (e.key === ' ' || e.key === 'Enter') setBypass(false, b); });
+  });
+
+  if (coarse) $('hint-t').textContent = '1 dito: inclina · 2 dita: sposta, pizzica, ruota';
+  selectCat('prisma');
+
+  resize();
+  loadSample();
+  requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
